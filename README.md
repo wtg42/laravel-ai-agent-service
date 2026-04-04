@@ -27,7 +27,9 @@
 
 ### 已實作
 
-> 尚未開始
+| 功能 | Agent | 說明 |
+|------|-------|------|
+| 中文姓名偵測 | `ChineseNameDetectionAgent` | 從文字中抽取明確中文姓名，回傳 `value`、`evidence`、`confidence` |
 
 ### 規劃中
 
@@ -38,7 +40,7 @@
 | 圖片身份證辨識 | `IdentityDocumentAgent` | 從身份證圖片結構化擷取資料 |
 | 業務流程組合 | `DocumentProcessingAgent` | 組合多個 Agent 成一個稽核流程 |
 
-## 架構說明
+## 目前架構
 
 ```
 請求
@@ -47,47 +49,73 @@
 REST API 端點（routes/api.php）
   │
   ▼
+Form Request（app/Http/Requests/）
+  │  └─ 驗證輸入內容
+  ▼
+Controller（app/Http/Controllers/Api/）
+  │  ├─ 呼叫 Agent
+  │  └─ 組合 JSON 回應
+  ▼
 Agent（app/Ai/Agents/）
   │  ├─ 定義 AI 指示（system prompt）
-  │  └─ 載入 Tools
-  │
-  ▼
-Ollama（本地 Gemma 4 E2B）
-  │
-  ▼
-Tools（app/Ai/Tools/）─ 格式驗證、規則判斷
-  │
-  ▼
+  │  ├─ 指定 Ollama provider / model
+  │  └─ 定義 structured output schema
+   │
+   ▼
+Ollama（本地 Gemma 4 E2B / Gemma 4 E2B Q4）
+   │
+   ▼
+Tools（app/Ai/Tools/）
+  └─ 去重、稱謂剝除、明顯非姓名詞過濾
+   │
+   ▼
 結構化 JSON 回應
 ```
 
 ```
 app/
 ├── Ai/
-│   ├── Agents/     ← 每個辨識場景一個 Agent
-│   └── Tools/      ← 驗證工具（身份證格式、電話格式等）
+│   ├── Agents/
+│   │   └── ChineseNameDetectionAgent.php
+│   └── Tools/
+│       └── NormalizeDetectedNames.php
+├── Http/
+│   ├── Controllers/Api/
+│   │   └── ChineseNameDetectionController.php
+│   └── Requests/
+│       └── DetectChineseNamesRequest.php
 routes/
-└── api.php         ← REST API 端點
+└── api.php
+tests/
+└── Feature/
+    └── ChineseNameDetectionApiTest.php
 ```
 
 ## API 範例
 
 ```bash
-# Email 掃描個資
-POST /api/email/scan
+# 中文姓名偵測
+POST /api/pii/chinese-names/detect
 Content-Type: application/json
 
 {
-  "content": "您好，我是王小明，身份證字號 A123456789，聯絡電話 0912-345-678..."
+  "content": "您好，我是王小明，今天與陳怡君一起出席會議。"
 }
 
 # 回應
 {
-  "names": ["王小明"],
-  "id_numbers": [{ "value": "A123456789", "valid": true }],
-  "phones": ["0912-345-678"],
-  "emails": [],
-  "unified_ids": []
+  "names": [
+    {
+      "value": "王小明",
+      "evidence": "您好，我是王小明",
+      "confidence": 1
+    },
+    {
+      "value": "陳怡君",
+      "evidence": "今天與陳怡君一起出席會議",
+      "confidence": 1
+    }
+  ]
 }
 ```
 
@@ -101,8 +129,13 @@ composer install
 cp .env.example .env
 php artisan key:generate
 
+# 啟用 API route（若尚未有 routes/api.php，可參考 Laravel install:api 文件）
+
 # 資料庫
 php artisan migrate
+
+# 啟動 Ollama（另開終端）
+ollama serve
 
 # 執行（開發）
 composer run dev
@@ -110,9 +143,70 @@ composer run dev
 
 **Ollama 設定（`.env`）：**
 ```
-AI_DEFAULT_DRIVER=ollama
-OLLAMA_MODEL=gemma4:e2b
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=gemma4-e2b-q4:latest
+OLLAMA_TIMEOUT=60
 ```
+
+**拉取模型範例：**
+
+```bash
+ollama pull gemma4-e2b-q4:latest
+```
+
+## 測試方式
+
+### 1. 執行自動化測試
+
+```bash
+php artisan test --compact
+php artisan test --compact tests/Feature/ChineseNameDetectionApiTest.php
+```
+
+目前 feature tests 已覆蓋：
+- 成功偵測多個中文姓名
+- 空結果回應
+- 空白輸入驗證錯誤
+- 稱謂與機構名稱誤判過濾
+- Ollama / provider 失敗時回傳 `503`
+
+### 2. 手動測試 API
+
+先確認 Laravel 與 Ollama 都已啟動，再使用 `curl`：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/pii/chinese-names/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "出席者包含王小明、陳怡君、李承翰。"
+  }'
+```
+
+負樣本測試：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/pii/chinese-names/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "林務局與財務部將於明日公告。"
+  }'
+```
+
+欄位型輸入測試：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/pii/chinese-names/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "聯絡人：李美玲，承辦人：陳建宏。"
+  }'
+```
+
+### 3. 目前已知限制
+
+- 目前策略偏 `precision-first`，因此可能漏抓部分姓名
+- 名單型句子表現較好，欄位型多姓名輸入仍可能漏抓
+- `confidence` 目前主要來自模型輸出，不代表嚴格統計分數
 
 ## 開發指令
 
@@ -121,4 +215,5 @@ php artisan test --compact        # 執行測試
 vendor/bin/pint --dirty           # 格式化修改過的檔案
 php artisan make:agent FooAgent   # 建立新 Agent
 php artisan make:tool FooTool     # 建立新 Tool
+ollama serve                      # 啟動本地 Ollama service
 ```

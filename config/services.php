@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'ollama' => [
+        'model' => env('OLLAMA_MODEL', 'gemma4:e2b'),
+        'timeout' => (int) env('OLLAMA_TIMEOUT', 60),
+    ],
+
 ];
