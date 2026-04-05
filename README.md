@@ -19,7 +19,7 @@
 | 框架 | Laravel 13 |
 | AI SDK | `laravel/ai ^0.4.3` |
 | AI 模型 | Ollama + Gemma 4 E2B（本地部署） |
-| 資料庫 | SQLite（開發）|
+| 資料庫 | SQLite（開發） |
 | 測試 | Pest v4 |
 | 格式化 | Laravel Pint |
 
@@ -30,12 +30,13 @@
 | 功能 | Agent | 說明 |
 |------|-------|------|
 | 中文姓名偵測 | `ChineseNameDetectionAgent` | 從文字中抽取明確中文姓名，回傳 `value`、`evidence`、`confidence` |
+| Email 掃描（v1） | `EmailScanAgent` | 從 Email 文字掃描明確中文姓名，統一由 `names` 欄位回傳結果 |
 
 ### 規劃中
 
 | 功能 | Agent | 說明 |
 |------|-------|------|
-| Email 掃描個資 | `EmailScanAgent` | 從 Email 文字辨識姓名、身份證字號、電話、統編等 |
+| Email 掃描擴充欄位 | `EmailScanAgent` | 後續擴充身份證字號、電話、統編等其他個資類型 |
 | 影像 OCR | `OcrAgent` | 上傳圖片，提取圖中文字（需視覺模型） |
 | 圖片身份證辨識 | `IdentityDocumentAgent` | 從身份證圖片結構化擷取資料 |
 | 業務流程組合 | `DocumentProcessingAgent` | 組合多個 Agent 成一個稽核流程 |
@@ -53,22 +54,25 @@ Form Request（app/Http/Requests/）
   │  └─ 驗證輸入內容
   ▼
 Controller（app/Http/Controllers/Api/）
-  │  ├─ 呼叫 Agent
+  │  ├─ EmailScanController
+  │  ├─ ChineseNameDetectionController
   │  └─ 組合 JSON 回應
   ▼
 Agent（app/Ai/Agents/）
+  │  ├─ EmailScanAgent
+  │  ├─ ChineseNameDetectionAgent
   │  ├─ 定義 AI 指示（system prompt）
   │  ├─ 指定 Ollama provider / model
   │  └─ 定義 structured output schema
-   │
-   ▼
+  │
+  ▼
 Ollama（本地 Gemma 4 E2B / Gemma 4 E2B Q4）
-   │
-   ▼
+  │
+  ▼
 Tools（app/Ai/Tools/）
   └─ 去重、稱謂剝除、明顯非姓名詞過濾
-   │
-   ▼
+  │
+  ▼
 結構化 JSON 回應
 ```
 
@@ -76,25 +80,53 @@ Tools（app/Ai/Tools/）
 app/
 ├── Ai/
 │   ├── Agents/
-│   │   └── ChineseNameDetectionAgent.php
+│   │   ├── ChineseNameDetectionAgent.php
+│   │   └── EmailScanAgent.php
 │   └── Tools/
 │       └── NormalizeDetectedNames.php
 ├── Http/
 │   ├── Controllers/Api/
-│   │   └── ChineseNameDetectionController.php
+│   │   ├── ChineseNameDetectionController.php
+│   │   └── EmailScanController.php
 │   └── Requests/
-│       └── DetectChineseNamesRequest.php
+│       ├── DetectChineseNamesRequest.php
+│       └── ScanEmailRequest.php
 routes/
 └── api.php
 tests/
 └── Feature/
-    └── ChineseNameDetectionApiTest.php
+    ├── ChineseNameDetectionApiTest.php
+    └── EmailScanApiTest.php
 ```
 
 ## API 範例
 
 ```bash
-# 中文姓名偵測
+# Email 掃描（目前較貼近產品方向的主入口，v1 只回傳 names）
+POST /api/pii/email-scan
+Content-Type: application/json
+
+{
+  "content": "寄件人：王小明。請與陳怡君確認報價。"
+}
+
+# 回應
+{
+  "names": [
+    {
+      "value": "王小明",
+      "evidence": "寄件人：王小明",
+      "confidence": 0.81
+    },
+    {
+      "value": "陳怡君",
+      "evidence": "請與陳怡君確認報價。",
+      "confidence": 0.89
+    }
+  ]
+}
+
+# 中文姓名偵測（既有獨立能力，保留作為過渡期入口）
 POST /api/pii/chinese-names/detect
 Content-Type: application/json
 
@@ -161,20 +193,36 @@ ollama pull gemma4-e2b-q4:latest
 ```bash
 php artisan test --compact
 php artisan test --compact tests/Feature/ChineseNameDetectionApiTest.php
+php artisan test --compact tests/Feature/EmailScanApiTest.php
 ```
 
 目前 feature tests 已覆蓋：
-- 成功偵測多個中文姓名
-- 空結果回應
-- 空白輸入驗證錯誤
-- 稱謂與機構名稱誤判過濾
-- Ollama / provider 失敗時回傳 `503`
+- `ChineseNameDetectionApiTest`
+  - 成功偵測多個中文姓名與重複值正規化
+  - 空結果回應
+  - 空白輸入驗證錯誤
+  - 稱謂與機構名稱誤判過濾
+  - Ollama / provider 失敗時回傳 `503`
+- `EmailScanApiTest`
+  - 單一與多個中文姓名偵測
+  - 空結果回應
+  - 空白 Email 內容驗證錯誤
+  - 稱謂、機構名稱與重複值過濾
+  - Ollama / provider 失敗時回傳 `503`
 
 ### 2. 手動測試 API
 
 先確認 Laravel 與 Ollama 都已啟動，再使用 `curl`：
 
 ```bash
+# Email 掃描（v1）
+curl -X POST http://127.0.0.1:8000/api/pii/email-scan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "寄件人：王小明。請與陳怡君確認報價。"
+  }'
+
+# 中文姓名偵測
 curl -X POST http://127.0.0.1:8000/api/pii/chinese-names/detect \
   -H "Content-Type: application/json" \
   -d '{
@@ -195,16 +243,17 @@ curl -X POST http://127.0.0.1:8000/api/pii/chinese-names/detect \
 欄位型輸入測試：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/pii/chinese-names/detect \
+curl -X POST http://127.0.0.1:8000/api/pii/email-scan \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "聯絡人：李美玲，承辦人：陳建宏。"
+    "content": "聯絡窗口：李美玲。李美玲老師已確認出席。"
   }'
 ```
 
 ### 3. 目前已知限制
 
 - 目前策略偏 `precision-first`，因此可能漏抓部分姓名
+- `EmailScanAgent` v1 目前只回傳 `names`，尚未支援身份證字號、電話、統編、附件或 OCR
 - 名單型句子表現較好，欄位型多姓名輸入仍可能漏抓
 - `confidence` 目前主要來自模型輸出，不代表嚴格統計分數
 
