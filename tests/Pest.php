@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Symfony\Component\Process\Process;
 use Tests\TestCase;
 
 /*
@@ -20,21 +22,6 @@ pest()->extend(TestCase::class)
 
 /*
 |--------------------------------------------------------------------------
-| Expectations
-|--------------------------------------------------------------------------
-|
-| When you're writing tests, you often need to check that values meet certain conditions. The
-| "expect()" function gives you access to a set of "expectations" methods that you can use
-| to assert different things. Of course, you may extend the Expectation API at any time.
-|
-*/
-
-expect()->extend('toBeOne', function () {
-    return $this->toBe(1);
-});
-
-/*
-|--------------------------------------------------------------------------
 | Functions
 |--------------------------------------------------------------------------
 |
@@ -47,4 +34,14 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+function testUploadedImage(string $name = 'document.png'): UploadedFile
+{
+    $path = sprintf('%s/%s.png', sys_get_temp_dir(), uniqid('adaptive-ocr-', true));
+
+    $process = new Process(['magick', '-size', '8x8', 'xc:white', $path]);
+    $process->mustRun();
+
+    return new UploadedFile($path, $name, 'image/png', test: true);
 }
