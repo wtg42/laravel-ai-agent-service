@@ -166,10 +166,11 @@ php artisan key:generate
 # 資料庫
 php artisan migrate
 
-# 啟動 Ollama（另開終端）
-ollama serve
+# 啟動 AI 開發工作流（推薦）
+just dev
 
-# 執行（開發）
+# 或分開啟動（保留既有工作流）
+ollama serve
 composer run dev
 ```
 
@@ -260,9 +261,12 @@ curl -X POST http://127.0.0.1:8000/api/pii/email-scan \
 ## 開發指令
 
 ```bash
+just dev                          # 同時啟動 composer run dev 與 ollama serve
 php artisan test --compact        # 執行測試
 vendor/bin/pint --dirty           # 格式化修改過的檔案
 php artisan make:agent FooAgent   # 建立新 Agent
 php artisan make:tool FooTool     # 建立新 Tool
 ollama serve                      # 啟動本地 Ollama service
 ```
+
+`just dev` 會先檢查本機是否可執行 `ollama`，再啟動 `ollama serve` 與 `composer run dev`。若任一側退出或你按下 `Ctrl+C`，另一側也會一併停止。既有的 `composer run dev` 內容保持不變，可在不需要 AI runtime 時獨立使用。

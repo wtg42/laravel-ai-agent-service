@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+OLLAMA_BIN="${OLLAMA_BIN:-ollama}"
+OLLAMA_SERVE_COMMAND="${OLLAMA_SERVE_COMMAND:-$OLLAMA_BIN serve}"
+COMPOSER_DEV_COMMAND="${COMPOSER_DEV_COMMAND:-composer run dev}"
+OLLAMA_HEALTHCHECK_COMMAND="${OLLAMA_HEALTHCHECK_COMMAND:-curl -fsS --max-time 1 http://127.0.0.1:11434/api/version >/dev/null}"
+OLLAMA_STARTUP_TIMEOUT="${OLLAMA_STARTUP_TIMEOUT:-15}"
+OLLAMA_PID=""
+APP_PID=""
+
+cleanup() {
+    trap - EXIT INT TERM
+
+    if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" 2>/dev/null; then
+        kill "$APP_PID" 2>/dev/null || true
+    fi
+
+    if [[ -n "$OLLAMA_PID" ]] && kill -0 "$OLLAMA_PID" 2>/dev/null; then
+        kill "$OLLAMA_PID" 2>/dev/null || true
+    fi
+
+    wait "$APP_PID" 2>/dev/null || true
+    wait "$OLLAMA_PID" 2>/dev/null || true
+}
+
+on_interrupt() {
+    echo "Interrupted. Stopping Laravel dev services and Ollama..." >&2
+    cleanup
+    exit 130
+}
+
+trap on_interrupt INT TERM
+trap cleanup EXIT
+
+if ! command -v "$OLLAMA_BIN" >/dev/null 2>&1; then
+    echo "Unable to start AI development workflow: '$OLLAMA_BIN' is not installed or not on PATH." >&2
+    exit 127
+fi
+
+echo "Starting Ollama..." >&2
+bash -lc "exec $OLLAMA_SERVE_COMMAND" &
+OLLAMA_PID=$!
+
+started_at=$(date +%s)
+
+while true; do
+    if ! kill -0 "$OLLAMA_PID" 2>/dev/null; then
+        echo "Unable to start AI development workflow: 'ollama serve' exited before becoming ready." >&2
+        exit 1
+    fi
+
+    if bash -lc "$OLLAMA_HEALTHCHECK_COMMAND" >/dev/null 2>&1; then
+        break
+    fi
+
+    if (( $(date +%s) - started_at >= OLLAMA_STARTUP_TIMEOUT )); then
+        echo "Unable to start AI development workflow: timed out waiting for Ollama to become ready." >&2
+        exit 1
+    fi
+
+    sleep 1
+done
+
+echo "Starting Laravel development services..." >&2
+bash -lc "exec $COMPOSER_DEV_COMMAND" &
+APP_PID=$!
+
+set +e
+wait -n "$OLLAMA_PID" "$APP_PID"
+exit_code=$?
+set -e
+
+if ! kill -0 "$OLLAMA_PID" 2>/dev/null; then
+    echo "Ollama stopped. Shutting down Laravel development services..." >&2
+else
+    echo "Laravel development services stopped. Shutting down Ollama..." >&2
+fi
+
+exit "$exit_code"
