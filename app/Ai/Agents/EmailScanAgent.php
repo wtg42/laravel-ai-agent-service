@@ -2,13 +2,19 @@
 
 namespace App\Ai\Agents;
 
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Attributes\Provider;
+use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Promptable;
 use Stringable;
 
 #[Provider(Lab::Ollama)]
-class EmailScanAgent extends ChineseNameDetectionAgent
+class EmailScanAgent implements Agent, HasStructuredOutput
 {
+    use Promptable;
+
     public function instructions(): Stringable|string
     {
         return <<<'PROMPT'
@@ -24,5 +30,28 @@ Rules:
 - Set confidence to a number between 0 and 1.
 - Return an empty names array when no explicit Chinese full names are found.
 PROMPT;
+    }
+
+    public function model(): string
+    {
+        return (string) config('services.ollama.model', 'gemma4:e2b');
+    }
+
+    public function timeout(): int
+    {
+        return (int) config('services.ollama.timeout', 60);
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'names' => $schema->array()
+                ->items($schema->object([
+                    'value' => $schema->string()->required(),
+                    'evidence' => $schema->string()->required(),
+                    'confidence' => $schema->number()->min(0)->max(1)->required(),
+                ]))
+                ->required(),
+        ];
     }
 }

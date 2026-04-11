@@ -6,6 +6,16 @@ use Tests\TestCase;
 
 pest()->extend(TestCase::class);
 
+it('uses the configured model and timeout for email scans', function () {
+    config()->set('services.ollama.model', 'gemma-email-test');
+    config()->set('services.ollama.timeout', 90);
+
+    $agent = new EmailScanAgent;
+
+    expect($agent->model())->toBe('gemma-email-test')
+        ->and($agent->timeout())->toBe(90);
+});
+
 it('describes the email scanning strategy in its instructions', function () {
     $agent = new EmailScanAgent;
     $instructions = (string) $agent->instructions();
