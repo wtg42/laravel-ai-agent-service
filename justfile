@@ -5,3 +5,6 @@ default:
 
 dev:
     @./bin/dev
+
+smoke:
+    @node bin/smoke.js
