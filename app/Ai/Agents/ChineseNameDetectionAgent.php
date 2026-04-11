@@ -3,12 +3,14 @@
 namespace App\Ai\Agents;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
 
+#[Provider(Lab::Ollama)]
 class ChineseNameDetectionAgent implements Agent, HasStructuredOutput
 {
     use Promptable;
@@ -27,11 +29,6 @@ Rules:
 - Set confidence to a number between 0 and 1.
 - Return an empty names array when no explicit Chinese full names are found.
 PROMPT;
-    }
-
-    public function provider(): Lab|string
-    {
-        return Lab::Ollama;
     }
 
     public function model(): string

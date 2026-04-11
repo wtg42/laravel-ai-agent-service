@@ -2,19 +2,17 @@
 
 use App\Ai\Agents\ChineseNameDetectionAgent;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
-use Laravel\Ai\Enums\Lab;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class);
 
-it('uses the configured provider model and timeout', function () {
+it('uses the configured model and timeout', function () {
     config()->set('services.ollama.model', 'gemma-test-model');
     config()->set('services.ollama.timeout', 120);
 
     $agent = new ChineseNameDetectionAgent;
 
-    expect($agent->provider())->toBe(Lab::Ollama)
-        ->and($agent->model())->toBe('gemma-test-model')
+    expect($agent->model())->toBe('gemma-test-model')
         ->and($agent->timeout())->toBe(120);
 });
 

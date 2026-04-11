@@ -2,19 +2,17 @@
 
 use App\Ai\Agents\AdaptiveOcrAgent;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
-use Laravel\Ai\Enums\Lab;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class);
 
-it('uses the configured provider model and timeout for adaptive ocr', function () {
+it('uses the configured model and timeout for adaptive ocr', function () {
     config()->set('services.ollama.model', 'gemma4:vision-test');
     config()->set('services.ollama.timeout', 75);
 
     $agent = new AdaptiveOcrAgent;
 
-    expect($agent->provider())->toBe(Lab::Ollama)
-        ->and($agent->model())->toBe('gemma4:vision-test')
+    expect($agent->model())->toBe('gemma4:vision-test')
         ->and($agent->timeout())->toBe(75);
 });
 

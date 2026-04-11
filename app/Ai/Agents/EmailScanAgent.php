@@ -2,8 +2,11 @@
 
 namespace App\Ai\Agents;
 
+use Laravel\Ai\Attributes\Provider;
+use Laravel\Ai\Enums\Lab;
 use Stringable;
 
+#[Provider(Lab::Ollama)]
 class EmailScanAgent extends ChineseNameDetectionAgent
 {
     public function instructions(): Stringable|string

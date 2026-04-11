@@ -3,12 +3,14 @@
 namespace App\Ai\Agents;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
 
+#[Provider(Lab::Ollama)]
 class AdaptiveOcrAgent implements Agent, HasStructuredOutput
 {
     use Promptable;
@@ -39,11 +41,6 @@ Rules:
 - Put human-readable caveats in `warnings`.
 - Set confidence to a number between 0 and 1.
 PROMPT;
-    }
-
-    public function provider(): Lab|string
-    {
-        return Lab::Ollama;
     }
 
     public function model(): string
