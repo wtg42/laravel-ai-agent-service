@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+php "$ROOT_DIR/bin/dev-preflight.php"
+
 OLLAMA_BIN="${OLLAMA_BIN:-ollama}"
 OLLAMA_SERVE_COMMAND="${OLLAMA_SERVE_COMMAND:-$OLLAMA_BIN serve}"
 COMPOSER_DEV_COMMAND="${COMPOSER_DEV_COMMAND:-composer run dev}"
